@@ -1,4 +1,3 @@
-```markdown
 # SciWheel-to-Zotero Hierarchical Migration Toolkit
 
 This repository provides a reliable, two-part automated framework to migrate a massive reference library out of **SciWheel** and into **Zotero** while fully preserving:
