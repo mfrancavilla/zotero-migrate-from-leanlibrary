@@ -1,0 +1,17 @@
+# --- Personal Data & Reference Files ---
+input.ris
+input_backed_up.ris
+remaining_no_pdf.ris
+sciwheel_hierarchy.json
+zotero_import.rdf
+
+# --- Local PDF Storage ---
+files/
+*.pdf
+*.zip
+
+# --- Python Environment & OS Garbage ---
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
