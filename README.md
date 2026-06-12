@@ -1,9 +1,3 @@
-Here is a complete, production-ready `README.md` markdown file that documents this entire specialized migration workflow from SciWheel to Zotero.
-
-It is structured exactly for GitHub, utilizing clear technical blocks, code copy-paste frameworks, and architectural warnings to help anyone else facing the same migration hurdle.
-
----
-
 ```markdown
 # SciWheel-to-Zotero Hierarchical Migration Toolkit
 
