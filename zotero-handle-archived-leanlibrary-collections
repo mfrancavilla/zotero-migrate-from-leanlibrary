@@ -1,0 +1,96 @@
+async function migrateItemsByTag() {
+    const libraryID = Zotero.Libraries.userLibraryID;
+    const itemIDs = await Zotero.Items.getAllIDs(libraryID);
+    
+    Zotero.debug(`Found ${itemIDs.length} items to evaluate.`);
+
+    // Step 1: Ensure root "Archived" collection exists
+    let rootCollections = await Zotero.Collections.getByLibrary(libraryID);
+    let archiveCollection = rootCollections.find(c => c.name === "Archived");
+    
+    if (!archiveCollection) {
+        await Zotero.DB.executeTransaction(async () => {
+            archiveCollection = new Zotero.Collection();
+            archiveCollection.name = "Archived";
+            archiveCollection.libraryID = libraryID;
+            await archiveCollection.save(); 
+        });
+    }
+
+    let processedCount = 0;
+    let migratedCount = 0;
+
+    // Step 2: Safely loop through items using item-level transactions
+    for (let id of itemIDs) {
+        processedCount++;
+        
+        // Yield thread execution every 25 items to prevent UI lockouts
+        if (processedCount % 25 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 15));
+        }
+
+        let item = await Zotero.Items.getAsync(id);
+        if (!item || !item.isRegularItem()) continue;
+
+        let tags = item.getTags();
+        let pathsToMigrate = [];
+
+        // Check tags outside a transaction to save processing power
+        for (let tag of tags) {
+            if (tag.tag.startsWith("ZOTEROMIGRATE:")) {
+                pathsToMigrate.push(tag.tag);
+            }
+        }
+
+        if (pathsToMigrate.length === 0) continue;
+
+        // Execute changes for this specific item inside a small transaction block
+        await Zotero.DB.executeTransaction(async () => {
+            // Re-fetch inside transaction to prevent data race conditions
+            let freshItem = await Zotero.Items.getAsync(id);
+            
+            for (let rawTag of pathsToMigrate) {
+                let path = rawTag.replace("ZOTEROMIGRATE:", "").trim();
+                let pathParts = path.split('/');
+                
+                // Fetch or build the nested collection tree
+                let targetCollection = await getOrCreateNestedCollection(pathParts, archiveCollection.id, libraryID);
+                
+                if (targetCollection) {
+                    await targetCollection.addItem(freshItem.id);
+                    await freshItem.removeTag(rawTag);
+                }
+            }
+            
+            await freshItem.save();
+            migratedCount++;
+        });
+    }
+
+    return `Migration complete. Processed ${processedCount} items. Migrated ${migratedCount} items.`;
+}
+
+async function getOrCreateNestedCollection(pathParts, parentID, libraryID) {
+    let currentParentID = parentID;
+    
+    for (let part of pathParts) {
+        let parent = await Zotero.Collections.getAsync(currentParentID);
+        let children = await parent.getChildCollections();
+        
+        let found = children.find(c => c.name === part);
+        
+        if (found) {
+            currentParentID = found.id;
+        } else {
+            let newColl = new Zotero.Collection();
+            newColl.name = part;
+            newColl.parentID = currentParentID;
+            newColl.libraryID = libraryID;
+            await newColl.save(); // Saved under the current parent transaction context
+            currentParentID = newColl.id;
+        }
+    }
+    return Zotero.Collections.getAsync(currentParentID);
+}
+
+await migrateItemsByTag();
